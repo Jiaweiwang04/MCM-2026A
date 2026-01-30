@@ -1,0 +1,33 @@
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+.venv/
+venv/
+.env
+
+# Conda
+.conda/
+conda-meta/
+
+# Jupyter
+*.ipynb
+
+# Data / outputs (usually not tracked)
+data/raw/
+data/processed/
+results/
+outputs/
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
