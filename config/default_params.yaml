@@ -1,0 +1,105 @@
+# SOC-Thermal-Network Model Parameters (v1)
+# 所有参数单位遵循 SI 体系：时间(s)、温度(K)、功率(W)、能量(J)
+
+# ============ 热模型参数 (Thermal Model) ============
+thermal:
+  C_eq: 500.0           # 等效热容 (J/K)，典型手机约 400-600
+  hA: 1.5               # 散热系数 (W/K)，手机自然散热约 1.5-3.0
+  T_thresh: 300.15      # 温控阈值 (K)，约 35°C
+  lambda: 0.5           # 温控陡峭度 (1/K)，控制 φ(T) 下降速度
+  T_env: 298.15         # 环境温度 (K)，约 25°C，可被数据覆盖
+
+# ============ 功耗模型参数 (Power Model) ============
+power:
+  P_base: 0.5           # 基础功耗 (W)
+  
+  # 屏幕功耗 P_scr = u_on * (α_0 + α_1 * b)
+  screen:
+    alpha_0: 0.3        # 最低亮度屏幕功耗 (W)
+    alpha_1: 1.2        # 亮度线性系数 (W)
+  
+  # CPU/GPU 功耗 P_cpu = β_1 * u_cpu + β_2 * u_cpu^2
+  cpu:
+    beta_1: 1.5         # CPU 线性系数 (W)
+    beta_2: 1.0         # CPU 二次项系数 (W)
+    k_cpu: 0.074       # cpu 系数
+  
+  
+  # 网络功耗 P_net = (1/S_signal) * (P_idle + k_net * z)
+  # 按网络类型区分：wifi / cellular / none（若日志无类型则用default）
+  network:
+    S_signal_default: 1.0  # 默认信号强度 (1.0为满信号，<1.0信号差耗电增加)
+    default_type: 'cellular'  # 当net_type缺失时的默认类型
+    
+    wifi:
+      P_idle: 0.15      # WiFi 待机功耗 (W)，通常低于蜂窝
+      k_net: 0.0001     # 网络尾态系数 (W/单位z)
+    
+    cellular:
+      P_idle: 0.25      # 蜂窝网待机功耗 (W)，射频模块功耗较高
+      k_net: 0.00015    # 网络尾态系数 (W/单位z)
+    
+    none:
+      P_idle: 0.0       # 无网络时待机功耗
+      k_net: 0.0        # 无网络时尾态系数
+
+# ============ 电池参数 (Battery Model) ============
+battery:
+  E_nom_Wh: 15.0        # 名义容量 (Wh)，约 4000 mAh @ 3.7V
+  V_nom: 3.7            # 名义电压 (V)
+  H: 1.0                # 健康度 SOH (0-1)，1.0为全新，影响有效容量
+  
+  # 内阻 Arrhenius 参数：R_int(T,s) = R_int(T) * [1 + c*(s_ref/(s+ε) - 1)]
+  internal_resistance:
+    R_ref: 0.15         # 参考内阻 (Ω)，手机约 0.1-0.2
+    T_ref: 298.15       # 参考温度 (K)，25°C
+    E_a: 0.3            # 活化能 (eV)，转换为 J: E_a_J = E_a * 1.602e-19
+    k_B: 8.617e-5       # 玻尔兹曼常数 (eV/K)
+    # SOC 非线性参数（低电量内阻增大）
+    c_soc: 0.3          # SOC 非线性强度系数 (0.2-0.6)
+    s_ref: 50.0         # 参考 SOC (%)，中等电量
+    epsilon: 1.0        # 防止除零的小常数
+  
+  # 温度对容量的影响 E_max(T)（倒钟形曲线）
+  capacity_temperature:
+    T_optimal: 298.15   # 最佳温度 (K)，25°C
+    T_low: 273.15       # 低温参考 (K)，0°C
+    T_high: 323.15      # 高温参考 (K)，50°C
+    capacity_factor_low: 0.7   # 低温时容量保留率
+    capacity_factor_high: 0.95 # 高温时容量保留率
+
+# ============ 网络尾态参数 (Network Tail State) ============
+# 按网络类型区分尾态时间常数（蜂窝tail更长、更显著）
+network_tail:
+  wifi:
+    tau_net: 5.0        # WiFi 尾态时间常数 (s)，切换较快
+  
+  cellular:
+    tau_net: 15.0       # 蜂窝网尾态时间常数 (s)，RRC状态机导致更长tail
+  
+  none:
+    tau_net: 0.1        # 无网络时几乎无tail（快速归零）
+
+# ============ 数值求解参数 (Numerical Solver) ============
+solver:
+  method: "euler"       # 数值方法: "euler" 或 "rk4"
+  dt_default: 1.0       # 默认时间步长 (s)，若日志无 timestamp 使用
+
+# ============ 初始条件 (Initial Conditions) ============
+# 若有数据覆盖，则以数据为准
+initial:
+  s0: 100.0             # 初始 SOC (%)
+  T0: null              # 初始温度 (K)，null 表示用 T_env
+  z0: 0.0               # 初始网络尾态
+
+# ============ 约束条件 (Constraints) ============
+constraints:
+  s_min: 0.0
+  s_max: 100.0
+  z_min: 0.0
+
+# ============ Baseline 配置（用于消融实验）============
+baseline:
+  no_thermal_throttling: false    # 若 true，令 φ(T) ≡ 1
+  no_network_tail: false          # 若 true，令 z(t) = x_net(t)
+  network_in_throttle: false      # 若 true，P_net 也受 φ(T) 抑制
